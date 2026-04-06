@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="color-scheme" content="light only">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stitch & Pixel — Crochet Grid Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #f5f0e8;
+    --warm-white: #faf7f2;
+    --yarn-rose: #c9737a;
+    --yarn-sage: #7a9e7e;
+    --yarn-gold: #c8a84b;
+    --yarn-navy: #2d3f5e;
+    --ink: #1a1410;
+    --mid: #8a7d72;
+    --border: #d4c9bb;
+    --cell: 18px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #f5f0e8 !important;
+    color: var(--ink);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Subtle linen texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.012) 2px, rgba(0,0,0,0.012) 4px),
+      repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(0,0,0,0.008) 2px, rgba(0,0,0,0.008) 4px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 16px;
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 28px;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 12px;
+  }
+
+  header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    letter-spacing: -0.5px;
+    color: var(--ink);
+  }
+
+  header span {
+    font-size: 11px;
+    color: var(--mid);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .panel {
+    background: var(--warm-white);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    background: var(--ink);
+    color: var(--cream);
+    font-size: 10px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    padding: 8px 14px;
+  }
+
+  .panel-body {
+    padding: 14px;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 6px;
+    text-align: center;
+    padding: 20px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--yarn-rose);
+    background: rgba(201,115,122,0.05);
+  }
+
+  .upload-zone input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .upload-icon {
+    font-size: 28px;
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .upload-zone p {
+    font-size: 11px;
+    color: var(--mid);
+    line-height: 1.5;
+  }
+
+  .upload-zone strong {
+    color: var(--yarn-rose);
+  }
+
+  /* Preview thumbnail */
+  #thumb-wrap {
+    display: none;
+    margin-top: 10px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1.5px solid var(--border);
+  }
+
+  #thumb-wrap img {
+    width: 100%;
+    display: block;
+    max-height: 120px;
+    object-fit: cover;
+  }
+
+  /* Controls */
+  .control-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .control-row:last-child { margin-bottom: 0; }
+
+  .control-row label {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--mid);
+  }
+
+  .control-row input[type=range] {
+    width: 100%;
+    accent-color: var(--yarn-rose);
+    height: 4px;
+  }
+
+  .control-row .val {
+    font-size: 12px;
+    color: var(--ink);
+    font-weight: 500;
+    text-align: right;
+  }
+
+  .control-row input[type=number] {
+    width: 100%;
+    background: #f5f0e8 !important;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--ink);
+  }
+
+  /* Palette */
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .swatch {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 4px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s, border-color 0.15s;
+    position: relative;
+  }
+
+  .swatch:hover { transform: scale(1.12); }
+  .swatch.active { border-color: var(--ink); }
+
+  .swatch .del {
+    position: absolute;
+    top: -5px; right: -5px;
+    width: 14px; height: 14px;
+    background: var(--ink);
+    color: white;
+    border-radius: 50%;
+    font-size: 9px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .swatch:hover .del { display: flex; }
+
+  .add-color-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .add-color-row input[type=color] {
+    width: 36px;
+    height: 32px;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    background: none;
+    padding: 2px;
+  }
+
+  .add-color-row button {
+    flex: 1;
+    background: var(--ink);
+    color: var(--cream);
+    border: none;
+    border-radius: 4px;
+    padding: 7px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    text-transform: uppercase;
+    transition: opacity 0.15s;
+  }
+
+  .add-color-row button:hover { opacity: 0.75; }
+
+  /* Tool buttons */
+  .tools {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .tool-btn {
+    background: #f5f0e8 !important;
+    border: 1.5px solid var(--border);
+    border-radius: 5px;
+    padding: 8px 6px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--ink);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+
+  .tool-btn:hover, .tool-btn.active {
+    background: var(--ink);
+    color: var(--cream);
+    border-color: var(--ink);
+  }
+
+  .tool-btn.danger:hover {
+    background: var(--yarn-rose);
+    border-color: var(--yarn-rose);
+    color: white;
+  }
+
+  .btn-primary {
+    width: 100%;
+    background: var(--yarn-rose);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── CANVAS AREA ── */
+  .canvas-wrap {
+    background: var(--warm-white);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .canvas-toolbar {
+    background: var(--warm-white);
+    border-bottom: 1.5px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .canvas-toolbar span {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--mid);
+  }
+
+  .canvas-inner {
+    padding: 16px;
+    overflow: auto;
+    max-height: 75vh;
+    position: relative;
+  }
+
+  #grid-container {
+    display: inline-block;
+    position: relative;
+    cursor: crosshair;
+    user-select: none;
+  }
+
+  canvas#grid-canvas {
+    display: block;
+    image-rendering: pixelated;
+  }
+
+  /* Overlay for row/col numbers */
+  .grid-numbers {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+  }
+
+  /* Empty state */
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--mid);
+  }
+
+  .empty-state .big { font-size: 48px; margin-bottom: 10px; display: block; }
+  .empty-state p { font-size: 12px; line-height: 1.8; }
+
+  /* Legend */
+  #legend {
+    display: none;
+    padding: 14px;
+    border-top: 1.5px solid var(--border);
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--ink);
+  }
+
+  .legend-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 3px;
+    border: 1px solid rgba(0,0,0,0.15);
+    flex-shrink: 0;
+  }
+
+  /* Stitch counter */
+  #stitch-info {
+    font-size: 10px;
+    color: var(--mid);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-left: auto;
+  }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--ink);
+    color: var(--cream);
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 12px;
+    letter-spacing: 1px;
+    transition: transform 0.3s;
+    z-index: 999;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 700px) {
+    .workspace { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body style="background:#f5f0e8;min-height:100vh;">
+<div class="app">
+  <header>
+    <h1>Stitch &amp; Pixel</h1>
+    <span>Crochet Grid Generator</span>
+  </header>
+
+  <div class="workspace">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+
+      <!-- Upload -->
+      <div class="panel">
+        <div class="panel-header">Image</div>
+        <div class="panel-body">
+          <div class="upload-zone" id="drop-zone">
+            <input type="file" id="file-input" accept="image/*">
+            <span class="upload-icon">🧶</span>
+            <p><strong>Click or drag</strong> an image<br>PNG, JPG, GIF, WebP</p>
+          </div>
+          <div id="thumb-wrap"><img id="thumb" src="" alt="preview"></div>
+        </div>
+      </div>
+
+      <!-- Grid Settings -->
+      <div class="panel">
+        <div class="panel-header">Grid Settings</div>
+        <div class="panel-body">
+          <div class="control-row">
+            <label>Width (stitches) <span class="val" id="w-val">40</span></label>
+            <input type="range" id="grid-w" min="10" max="100" value="40">
+          </div>
+          <div class="control-row">
+            <label>Height (rows) <span class="val" id="h-val">40</span></label>
+            <input type="range" id="grid-h" min="10" max="100" value="40">
+          </div>
+          <div class="control-row">
+            <label>Max Colors</label>
+            <input type="number" id="max-colors" min="2" max="20" value="6">
+          </div>
+          <div class="control-row" style="margin-top:8px;">
+            <button class="btn-primary" id="generate-btn" disabled>Generate Pattern</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Palette -->
+      <div class="panel">
+        <div class="panel-header">Color Palette</div>
+        <div class="panel-body">
+          <div class="palette-grid" id="palette-grid"></div>
+          <div class="add-color-row">
+            <input type="color" id="new-color" value="#c9737a">
+            <button id="add-color-btn">+ Add</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tools -->
+      <div class="panel">
+        <div class="panel-header">Tools</div>
+        <div class="panel-body">
+          <div class="tools" style="margin-bottom:8px;">
+            <button class="tool-btn active" id="tool-paint" onclick="setTool('paint')">✏️ Paint</button>
+            <button class="tool-btn" id="tool-fill" onclick="setTool('fill')">🪣 Fill</button>
+            <button class="tool-btn" id="tool-erase" onclick="setTool('erase')">🧹 Erase</button>
+            <button class="tool-btn" id="tool-eyedrop" onclick="setTool('eyedrop')">💉 Pick</button>
+          </div>
+          <div class="tools">
+            <button class="tool-btn" onclick="toggleGrid()">⊞ Grid</button>
+            <button class="tool-btn" onclick="toggleNumbers()">🔢 Nums</button>
+            <button class="tool-btn" onclick="exportPNG()">⬇ PNG</button>
+            <button class="tool-btn danger" onclick="clearPattern()">✕ Clear</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- CANVAS -->
+    <div class="canvas-wrap">
+      <div class="canvas-toolbar">
+        <span id="grid-label">No pattern loaded</span>
+        <span id="stitch-info"></span>
+      </div>
+      <div class="canvas-inner">
+        <div id="empty-state" class="empty-state">
+          <span class="big">🧵</span>
+          <p>Upload an image and click<br><strong>Generate Pattern</strong> to begin.<br><br>
+          Then paint, fill, and edit<br>your crochet chart.</p>
+        </div>
+        <div id="grid-container" style="display:none;">
+          <canvas id="grid-canvas"></canvas>
+        </div>
+      </div>
+      <div id="legend" style="display:flex;"></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ──
+let gridW = 40, gridH = 40;
+let cells = []; // flat array of color strings
+let palette = ['#c9737a','#7a9e7e','#c8a84b','#2d3f5e','#f5f0e8','#1a1410'];
+let activePalette = '#c9737a';
+let currentTool = 'paint';
+let showGridLines = true;
+let showNumbers = false;
+let isDrawing = false;
+let uploadedImage = null;
+
+const CELL = 16;
+
+// ── DOM ──
+const canvas = document.getElementById('grid-canvas');
+const ctx = canvas.getContext('2d');
+const fileInput = document.getElementById('file-input');
+const generateBtn = document.getElementById('generate-btn');
+const gridContainer = document.getElementById('grid-container');
+const emptyState = document.getElementById('empty-state');
+const legend = document.getElementById('legend');
+
+// ── PALETTE UI ──
+function renderPalette() {
+  const pg = document.getElementById('palette-grid');
+  pg.innerHTML = '';
+  palette.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'swatch' + (c === activePalette ? ' active' : '');
+    sw.style.background = c;
+    sw.onclick = () => { activePalette = c; renderPalette(); if(currentTool==='erase') setTool('paint'); };
+    const del = document.createElement('div');
+    del.className = 'del';
+    del.textContent = '×';
+    del.onclick = (e) => { e.stopPropagation(); removePaletteColor(c); };
+    sw.appendChild(del);
+    pg.appendChild(sw);
+  });
+}
+
+function removePaletteColor(c) {
+  if(palette.length <= 1) return;
+  palette = palette.filter(p => p !== c);
+  if(activePalette === c) activePalette = palette[0];
+  renderPalette();
+}
+
+document.getElementById('add-color-btn').onclick = () => {
+  const c = document.getElementById('new-color').value;
+  if(!palette.includes(c)) { palette.push(c); renderPalette(); }
+  activePalette = c; renderPalette();
+};
+
+renderPalette();
+
+// ── SLIDERS ──
+['grid-w','grid-h'].forEach(id => {
+  document.getElementById(id).oninput = function() {
+    if(id==='grid-w') { gridW=+this.value; document.getElementById('w-val').textContent=this.value; }
+    else { gridH=+this.value; document.getElementById('h-val').textContent=this.value; }
+  };
+});
+
+// ── FILE UPLOAD ──
+fileInput.onchange = e => loadImage(e.target.files[0]);
+
+const dropZone = document.getElementById('drop-zone');
+dropZone.ondragover = e => { e.preventDefault(); dropZone.classList.add('drag-over'); };
+dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
+dropZone.ondrop = e => { e.preventDefault(); dropZone.classList.remove('drag-over'); loadImage(e.dataTransfer.files[0]); };
+
+function loadImage(file) {
+  if(!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      uploadedImage = img;
+      const thumb = document.getElementById('thumb');
+      thumb.src = ev.target.result;
+      document.getElementById('thumb-wrap').style.display = 'block';
+      generateBtn.disabled = false;
+      toast('Image loaded! Click Generate Pattern.');
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── QUANTIZE / GENERATE ──
+generateBtn.onclick = generatePattern;
+
+function generatePattern() {
+  if(!uploadedImage) return;
+  const maxC = Math.min(20, Math.max(2, +document.getElementById('max-colors').value));
+
+  // Downsample image to grid size
+  const tmp = document.createElement('canvas');
+  tmp.width = gridW; tmp.height = gridH;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(uploadedImage, 0, 0, gridW, gridH);
+  const imgData = tctx.getImageData(0, 0, gridW, gridH).data;
+
+  // Sample colors
+  const samples = [];
+  for(let i=0; i<gridW*gridH; i++) {
+    samples.push([imgData[i*4], imgData[i*4+1], imgData[i*4+2]]);
+  }
+
+  // k-means quantize
+  const quantColors = kMeans(samples, maxC);
+
+  // Assign each pixel to nearest quantized color
+  cells = samples.map(px => {
+    const best = quantColors.reduce((b, c) => colorDist(px,c) < colorDist(px,b) ? c : b);
+    return rgbToHex(best[0], best[1], best[2]);
+  });
+
+  // Update palette from quantized colors
+  palette = quantColors.map(c => rgbToHex(Math.round(c[0]), Math.round(c[1]), Math.round(c[2])));
+  activePalette = palette[0];
+  renderPalette();
+
+  drawGrid();
+  showCanvas();
+  updateLegend();
+  updateInfo();
+  toast('Pattern generated!');
+}
+
+function kMeans(points, k, iterations=20) {
+  // Random init
+  let centroids = [];
+  const used = new Set();
+  while(centroids.length < k) {
+    const idx = Math.floor(Math.random() * points.length);
+    if(!used.has(idx)) { centroids.push([...points[idx]]); used.add(idx); }
+  }
+
+  for(let iter=0; iter<iterations; iter++) {
+    const clusters = Array.from({length:k}, ()=>([]) );
+    points.forEach(p => {
+      const bi = centroids.reduce((best,c,i)=> colorDist(p,c)<colorDist(p,centroids[best])?i:best, 0);
+      clusters[bi].push(p);
+    });
+    centroids = clusters.map((cl,i) => {
+      if(!cl.length) return centroids[i];
+      return [
+        cl.reduce((s,p)=>s+p[0],0)/cl.length,
+        cl.reduce((s,p)=>s+p[1],0)/cl.length,
+        cl.reduce((s,p)=>s+p[2],0)/cl.length,
+      ];
+    });
+  }
+  return centroids;
+}
+
+function colorDist(a,b) {
+  return (a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2;
+}
+
+function rgbToHex(r,g,b) {
+  return '#' + [r,g,b].map(v=>Math.min(255,Math.max(0,Math.round(v))).toString(16).padStart(2,'0')).join('');
+}
+
+// ── DRAW GRID ──
+function drawGrid() {
+  const numPad = showNumbers ? 22 : 0;
+  canvas.width  = gridW * CELL + numPad;
+  canvas.height = gridH * CELL + numPad;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Row/col number background
+  if(showNumbers) {
+    ctx.fillStyle = '#f0ece4';
+    ctx.fillRect(0, 0, numPad, canvas.height);
+    ctx.fillRect(0, 0, canvas.width, numPad);
+  }
+
+  const ox = numPad, oy = numPad;
+
+  for(let r=0; r<gridH; r++) {
+    for(let c=0; c<gridW; c++) {
+      const color = cells[r*gridW+c] || '#ffffff';
+      ctx.fillStyle = color;
+      ctx.fillRect(ox + c*CELL, oy + r*CELL, CELL, CELL);
+
+      if(showGridLines) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(ox + c*CELL + 0.25, oy + r*CELL + 0.25, CELL-0.5, CELL-0.5);
+      }
+    }
+  }
+
+  // Every 5th line bold
+  if(showGridLines) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 1;
+    for(let r=0; r<=gridH; r+=5) {
+      ctx.beginPath(); ctx.moveTo(ox, oy+r*CELL); ctx.lineTo(ox+gridW*CELL, oy+r*CELL); ctx.stroke();
+    }
+    for(let c=0; c<=gridW; c+=5) {
+      ctx.beginPath(); ctx.moveTo(ox+c*CELL, oy); ctx.lineTo(ox+c*CELL, oy+gridH*CELL); ctx.stroke();
+    }
+  }
+
+  // Numbers
+  if(showNumbers) {
+    ctx.fillStyle = '#8a7d72';
+    ctx.font = '9px DM Mono, monospace';
+    ctx.textAlign = 'center';
+    for(let c=0; c<gridW; c+=5) {
+      ctx.fillText(c+1, ox+c*CELL+CELL/2, 14);
+    }
+    ctx.textAlign = 'right';
+    for(let r=0; r<gridH; r+=5) {
+      ctx.fillText(r+1, numPad-3, oy+r*CELL+CELL/2+3);
+    }
+  }
+}
+
+// ── CANVAS INTERACTION ──
+function getCellFromEvent(e) {
+  const numPad = showNumbers ? 22 : 0;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left - numPad;
+  const y = e.clientY - rect.top - numPad;
+  const c = Math.floor(x / CELL);
+  const r = Math.floor(y / CELL);
+  if(c<0||r<0||c>=gridW||r>=gridH) return null;
+  return {r,c};
+}
+
+canvas.addEventListener('mousedown', e => {
+  isDrawing = true;
+  handlePaint(e);
+});
+canvas.addEventListener('mousemove', e => { if(isDrawing) handlePaint(e); });
+canvas.addEventListener('mouseup', () => { isDrawing = false; updateLegend(); updateInfo(); });
+canvas.addEventListener('mouseleave', () => isDrawing = false);
+
+// Touch support
+canvas.addEventListener('touchstart', e => { e.preventDefault(); isDrawing=true; handlePaint(e.touches[0]); }, {passive:false});
+canvas.addEventListener('touchmove', e => { e.preventDefault(); if(isDrawing) handlePaint(e.touches[0]); }, {passive:false});
+canvas.addEventListener('touchend', () => { isDrawing=false; updateLegend(); updateInfo(); });
+
+function handlePaint(e) {
+  const cell = getCellFromEvent(e);
+  if(!cell) return;
+  const idx = cell.r * gridW + cell.c;
+
+  if(currentTool === 'paint') {
+    cells[idx] = activePalette;
+    drawSingleCell(cell.r, cell.c);
+  } else if(currentTool === 'erase') {
+    cells[idx] = '#ffffff';
+    drawSingleCell(cell.r, cell.c);
+  } else if(currentTool === 'eyedrop') {
+    activePalette = cells[idx] || '#ffffff';
+    if(!palette.includes(activePalette)) { palette.push(activePalette); }
+    renderPalette();
+    setTool('paint');
+    toast('Color picked!');
+  } else if(currentTool === 'fill') {
+    floodFill(cell.r, cell.c, cells[idx], activePalette);
+    drawGrid();
+  }
+}
+
+function drawSingleCell(r, c) {
+  const numPad = showNumbers ? 22 : 0;
+  const ox = numPad, oy = numPad;
+  const color = cells[r*gridW+c] || '#ffffff';
+  ctx.fillStyle = color;
+  ctx.fillRect(ox+c*CELL, oy+r*CELL, CELL, CELL);
+  if(showGridLines) {
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(ox+c*CELL+0.25, oy+r*CELL+0.25, CELL-0.5, CELL-0.5);
+  }
+}
+
+function floodFill(r, c, target, replacement) {
+  if(target === replacement) return;
+  const stack = [[r,c]];
+  while(stack.length) {
+    const [cr,cc] = stack.pop();
+    if(cr<0||cr>=gridH||cc<0||cc>=gridW) continue;
+    if(cells[cr*gridW+cc] !== target) continue;
+    cells[cr*gridW+cc] = replacement;
+    stack.push([cr-1,cc],[cr+1,cc],[cr,cc-1],[cr,cc+1]);
+  }
+}
+
+// ── TOOLS ──
+function setTool(t) {
+  currentTool = t;
+  ['paint','fill','erase','eyedrop'].forEach(id => {
+    document.getElementById('tool-'+id)?.classList.toggle('active', id===t);
+  });
+}
+
+function toggleGrid() {
+  showGridLines = !showGridLines;
+  if(cells.length) drawGrid();
+}
+
+function toggleNumbers() {
+  showNumbers = !showNumbers;
+  if(cells.length) drawGrid();
+}
+
+function clearPattern() {
+  if(!cells.length) return;
+  cells = new Array(gridW*gridH).fill('#ffffff');
+  drawGrid();
+  updateLegend();
+  updateInfo();
+  toast('Pattern cleared.');
+}
+
+// ── EXPORT ──
+function exportPNG() {
+  if(!cells.length) return;
+  const link = document.createElement('a');
+  link.download = 'crochet-pattern.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  toast('PNG saved!');
+}
+
+// ── LEGEND ──
+function updateLegend() {
+  if(!cells.length) { legend.style.display='none'; return; }
+  const counts = {};
+  cells.forEach(c => { counts[c] = (counts[c]||0)+1; });
+  legend.innerHTML = '';
+  legend.style.display = 'flex';
+  Object.entries(counts).sort((a,b)=>b[1]-a[1]).forEach(([c,n]) => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `<div class="legend-swatch" style="background:${c}"></div>${c} <span style="color:var(--mid)">(${n})</span>`;
+    legend.appendChild(item);
+  });
+}
+
+function updateInfo() {
+  const filled = cells.filter(c => c && c !== '#ffffff').length;
+  document.getElementById('stitch-info').textContent = `${gridW}w × ${gridH}h · ${cells.length} stitches`;
+  document.getElementById('grid-label').textContent = `${gridW} × ${gridH} grid`;
+}
+
+function showCanvas() {
+  emptyState.style.display = 'none';
+  gridContainer.style.display = 'inline-block';
+}
+
+// ── TOAST ──
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>
